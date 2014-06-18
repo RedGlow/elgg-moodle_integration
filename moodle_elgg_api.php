@@ -7,7 +7,7 @@
  * @param $shortname string Shortname of the Moodle course
  * @return int GUID of the group 
  */
-function api_moodle_integration_get_group_guid($shortname) {
+function api_moodle_integration_get_group_guid($shortname, $community) {
 	global $CONFIG;
 
 	// Authenticate user with REST API authentication token
@@ -18,9 +18,11 @@ function api_moodle_integration_get_group_guid($shortname) {
 		throw new APIException(elgg_echo('APIException:GetGroupGuid:NoUser'));
 	}
 
+	$groupname = $shortname . '-' . $community;
+
 	$options = array(
 		'metadata_name' => 'moodle_shortname',
-		'metadata_value' => $shortname,
+		'metadata_value' => $groupname,
 		'type' => 'group',
 		'limit' => 1
 	);
@@ -40,7 +42,7 @@ function api_moodle_integration_get_group_guid($shortname) {
 		$group = new ElggGroup();
 		$group->membership = ACCESS_PRIVATE;
 		$group->access_id = ACCESS_PUBLIC;
-		$group->name = $shortname;
+		$group->name = $groupname;
 		$group->moodle_shortname = $shortname;
 		$guid = $group->save();
 
@@ -119,4 +121,36 @@ function api_moodle_integration_get_objects($object_type, $tag){
 	}
 
 	return $return;
+}
+
+function produce_login_token() {
+	global $CONFIG;
+
+	// get the user guid from the auth token
+	$auth_token = get_input('auth_token');
+	$user_guid = validate_user_token($auth_token, $CONFIG->site_id);
+
+	// produce the login token
+	$login_token = "";
+	for($i = 0; $i < 4; $i++) {
+		$num = mt_rand(0, 0xffff);
+		$output = sprintf("%04x", $num);
+		$login_token .= $output;
+	}
+
+	// save it with a timeout and the associated guid
+	$token_data = new ElggObject();
+	$token_data->title = "Token data";
+	$token_data->description = "";
+	$token_data->owner_guid = 0;
+	$token_data->container_guid = 0;
+	$token_data->subtype = "elgg-moodle-token-data";
+	$token_data->access_id = ACCESS_PUBLIC;
+	$token_data->token = $login_token;
+	$token_data->user_guid = $user_guid;
+	$token_data->timeout = time() + 10;
+
+	$token_data->save();
+
+	return $login_token;
 }

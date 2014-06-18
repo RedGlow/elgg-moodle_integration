@@ -15,6 +15,7 @@
 elgg_register_event_handler('init', 'system', 'moodle_integration_init');
 
 require_once('moodle_elgg_api.php');
+require_once('helpers.php');
 
 /**
  * Initialise plugin.
@@ -33,6 +34,7 @@ function moodle_integration_init() {
 			'username' => array('type' => 'string'),
 			'name' => array('type' => 'string'),
 			'email' => array('type' => 'string'),
+			'community' => array('type' => 'string')
 		), elgg_echo('moodle_integration:gettoken:description'),'POST', true, false
 	);
 
@@ -40,6 +42,7 @@ function moodle_integration_init() {
 		'elgg.get_groupGUID',
 		'api_moodle_integration_get_group_guid', array(
 			'shortname' => array('type' => 'string'),
+			'community' => array('type' => 'string')
 		), '', 'POST', true, false
 	);
 
@@ -57,6 +60,24 @@ function moodle_integration_init() {
 			'tag' => array('type' => 'string')
 		), '', 'POST', true, false
 	);
+
+	expose_function(
+		'elgg.get_login_url',
+		'get_login_url', array(
+		), '', 'POST', true, false
+	);
+
+	expose_function(
+		'elgg.produce_login_token',
+		'produce_login_token', array(
+		), '', 'POST', true, false
+	);
+
+	expose_function(
+		'elgg.get_token_login_url',
+		'get_token_login_url', array(
+		), '', 'POST', true, false
+	);
 }
 
 /**
@@ -71,10 +92,11 @@ function moodle_integration_init() {
  * @param string $code
  * @return string Authentication token
  */
-function api_moodle_integration_get_token($username, $name, $email) {
-	if (!get_user_by_username($username)) {
+function api_moodle_integration_get_token($username, $name, $email, $community) {
+	$fullusername = $username . '_' . $community;
+	if (!get_user_by_username($fullusername)) {
 		// Create new user
-		$user = moodle_integration_create_user($username, $name, $email);
+		$user = moodle_integration_create_user($fullusername, $name, $email);
 
 		if (!$user) {
 			// This should never happen
@@ -83,7 +105,7 @@ function api_moodle_integration_get_token($username, $name, $email) {
 	}
 
 	// Create token to be used for authentication in later requests
-	$token = create_user_token($username);
+	$token = create_user_token($fullusername);
 	if ($token) {
 		return $token;
 	} else {
@@ -155,17 +177,29 @@ MSG;
 	$user->email = $email;
 	$user->name = $name;
 	$user->access_id = ACCESS_PUBLIC;
-	$user->salt = generate_random_cleartext_password(); // Note salt generated before password!
-	$user->password = generate_user_password($user, $password);
+        $password = generate_random_cleartext_password();
+        $user->salt = _elgg_generate_password_salt();
+        $user->password = generate_user_password($user, $password);
 	$user->owner_guid = 0; // Users aren't owned by anyone, even if they are admin created.
 	$user->container_guid = 0; // Users aren't contained by anyone, even if they are admin created.
 	$user->registration_method = 'moodle_integration'; // Save info how account was created
+	register_plugin_hook('container_permissions_check', 'user', 'always_ok'); // Disable permission checks
 	$user->save();
+	unregister_plugin_hook('container_permissions_check', 'user', 'always_ok'); // Re-enable permission checks
 
 	// Turn on email notifications by default
 	set_user_notification_setting($user->getGUID(), 'email', true);
 
 	return $user->getGUID();
+}
+
+/**
+ * Function used to temporarily disable permission checks.
+ *
+ * @return TRUE
+ */
+function always_ok() {
+	return TRUE;
 }
 
 /**
