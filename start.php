@@ -178,7 +178,7 @@ MSG;
 	$user->name = $name;
 	$user->access_id = ACCESS_PUBLIC;
         $password = generate_random_cleartext_password();
-        $user->salt = _elgg_generate_password_salt();
+        $user->salt = generate_random_cleartext_password();
         $user->password = generate_user_password($user, $password);
 	$user->owner_guid = 0; // Users aren't owned by anyone, even if they are admin created.
 	$user->container_guid = 0; // Users aren't contained by anyone, even if they are admin created.
